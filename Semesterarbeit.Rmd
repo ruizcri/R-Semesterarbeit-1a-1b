@@ -1,0 +1,607 @@
+---
+title: "Semesterarbeit"
+author: "Cristian Ruiz"
+date: "2023-09-23"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Aufgabenstellung
+
+
+Für diese Arbeit habe ich mich dazu entschieden, einen Datensatz von meinem Arbeitgeber, der Jelmoli AG, zu verwenden. Wie bereits in verschiedenen Medien bekannt gegeben wurde, schliesst Jelmoli Ende 2024 seine Pforten. Das Warenhaus wird vollständig geschlossen, saniert und wird nicht mehr unter dem Namen Jelmoli eröffnet. Seit einigen Monaten arbeitet man daran, einen Schliessungsplan zu erstellen. Ein Teil dieses Plans besteht darin, die Lagerbestände bis zur Schliessung zu reduzieren, um nicht auf einem grossen Lagerbestand sitzen zu bleiben. Innerhalb dieses Plans laufen verschiedene Projekte, und eines davon ist die schrittweise Reduzierung der Lagerbestände von NOS-Artikeln. NOS steht für "Never Out of Stock", was so viel bedeutet wie "immer verfügbar". NOS-Artikel sind daher Artikel, die immer verfügbar sein sollten und zu den Grundlagen eines Sortiments gehören. In der Oberbekleidung könnte das beispielsweise ein weisses T-Shirt sein oder in der Parfümerie ein Parfüm, das das ganze Jahr über erhältlich sein sollte. In diesem Datensatz geht es um die NOS- oder Basic-Artikel aus der Parfümerie-Abteilung und deren Lagerreichweiten.
+
+Ich werde den Datensatz im folgenden Kapitel genauer erläutern, möchte jedoch kurz den groben Inhalt erklären, um auf die zu beantwortenden Fragen eingehen zu können. Im Datensatz sind Werte wie Absatz, Lagerbestand, Lagerreichweite und Sollbestand enthalten. Letzteres ist der Bestand, der für einen NOS-Artikel definiert ist. Wenn der Bestand unter den Sollbestand fällt, wird automatisch eine Bestellung mit der erforderlichen Menge ausgelöst, um den Sollbestand aufzufüllen.
+
+Hier ist ein Beispiel:
+
+Sollbestand von Artikel x = 5 Stück.
+Von Artikel x werden an einem Tag 3 Stück verkauft.
+Am nächsten Tag wird automatisch eine Bestellung generiert, um die fehlenden 3 Stück nachzubestellen.
+
+Daher möchte ich im Teil 1a meiner Arbeit insbesondere folgende Fragen beantworten:
+
+1. Bei welchen Artikeln muss der Sollbestand aufgrund ihrer hohen Lagerreichweite bereits jetzt auf Null gesetzt werden, sodass für diese Artikel keine Nachbestellung mehr generiert wird?
+2. Wie hoch ist der Anteil dieser Artikel? Mit anderen Worten, wie dringend müssen sie auf Null gesetzt werden?
+
+Im Teil 1b der Arbeit möchte ich mich insbesondere mit der Breite der Sortimente befassen. Oftmals wird bei Jelmoli diskutiert, dass Marken eine zu hohe Anzahl an Artikeln aufweisen, von denen nur ein Bruchteil signifikant zum Umsatz beiträgt. Des Weiteren haben wir in der Parfümerie den besonderen Fall, dass grösstenteils "Counter" in der Abteilung vorhanden sind. Counter sind von den Marken finanzierte Markenshops, die eigene Verkäufer haben und im Gegenzug oft verlangen, die gesamte oder eine sehr breite Produktpalette in das Sortiment aufzunehmen.
+
+Die Fragen, die ich in diesem Teil beantworten möchte, lauten wie folgt:
+
+1. Haben Counter-Marken eine schlechtere Lagerreichweite als Nicht-Counter-Marken (bei Nicht-Counter-Marken ist meist nur ein Bruchteil der Produktpalette im Sortiment)?
+2. Hat die Breite eines Sortiments Einfluss auf die Lagerreichweite?
+3. Wie hoch ist der Anteil in % von Topartikeln nach Umsatz?
+
+
+## Erläuterung Liste
+
+In dieser Analyse werde ich mich auf die Erläuterung der für die Analysen relevanten Variablen konzentrieren, da nicht alle Variablen im Datensatz benötigt werden. Der Datensatz wurde am 02.09.2024 erstellt und mir übergeben.
+
+1. **Marke Beschreibung** = Markenname
+2. **Artikelnummer** = Die Artikelnummer jedes Artikels.
+3. **Filialbestand** = Der Bestand zum Zeitpunkt, als die Liste generiert wurde.
+4. **Aktueller Sollbestand** = Siehe Erklärung in der Aufgabenstellung.
+5. **Datum erster Wareneingang** = Das Datum, an dem der Artikel zum ersten Mal eingetroffen ist.
+6. **VK Preis aktuell** = Aktueller Verkaufspreis.
+7. **September 2022 - August 2023** = Der Absatz, also der Umsatz in Stück, für jeden Artikel pro Monat.
+8. **Absatz 1 Jahr** = Die Summe der Absätze von September 2022 bis August 2023.
+9. **Absatz Schnitt Monat** = Absatz 1 Jahr dividiert durch 12. Hierbei wird beachtet, dass durch 12 geteilt wird, unabhängig davon, ob der Artikel weniger als 12 Monate im Laden ist. Dies bedeutet, dass auch für Artikel, die beispielsweise erst seit 6 Monaten im Laden sind, ein Jahresdurchschnitt berechnet wird.
+10. **Reichweite in Monaten** = Die Reichweite in Monaten gibt an, für wie viele Monate der aktuelle Lagerbestand voraussichtlich ausreichen wird, basierend auf dem aktuellen Absatz. In diesem Datensatz wird die Berechnung **Filialbestand** dividiert durch **Absatz Schnitt Monat** durchgeführt.
+
+Ich erkenne bereits jetzt, dass ich die Variable **Reichweite in Monaten** neu berechnen muss, um eine präzise Lagerreichweite zu erhalten. Dies liegt daran, dass die Variable **Absatz Schnitt Jahr** nicht berücksichtigt, ob Artikel weniger als 12 Monate im Laden sind. Zusätzlich möchte ich auch den Bezug zur Reichweite im Vergleich zum Sollbestand sehen, da ich Empfehlungen abgeben möchte, welche Artikel auf Null gesetzt werden sollten.
+
+
+Da ich schon jetzt weiss, dass ich ggplot2 und dplyr  brauchen werde, lade ich diese in meine Packages.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+
+# Teil 1a
+
+## Laden der Daten und Übersicht verschaffen
+
+### 1. Laden der Daten
+
+Ich weise als erstes dem Datensatz einen neuen Namen zu ("data") und lade die csv-Liste mit dem Befehl **read.csv2** und dem Namen der Datei. Ich brauche **read.csv2** damit es meine Header richitg erkennt.
+
+```{r}
+data <- read.csv2("Datensatz_Semesterarbeit 1.csv")
+```
+
+### 2. Übersicht verschaffen
+
+Mit dem Befehl **head** verschaffe ich mir einen ersten Überblick. Mir fällt auf, dass die Variablen *Datum erster Wareneingang*, *letztes We Datum* und *VK Preis aktuell* als "character" geladen wurden. Diese Werte muss ich im nächsten Schritt in Datums- oder Zahlenwerte umwandeln, da ich diese Werte für die neue Berechnung der Lagerreichweite benötige. Bei der Variable *VK Preis aktuell* bin ich mir noch nicht sicher, ob ich diese benötigen werde, jedoch wandele ich sie sicherheitshalber gleich mit. Die Umwandlung der Variablen behandele ich im Kapitel "1. Umwandlung von Datentypen".
+
+```{r}
+head(data)
+```
+
+Um mir eine zweite oder besser gesagt auch andere Übersicht zu verschaffen, erstelle ich mit dem Befefehl **view(data)** ein Data Viewer. Hier werde ich dann auch kontinuierlich meine Anpassungen prüfen.
+
+```{r}
+View(data)
+```
+
+Da ich die Lagerreichweite neu berechnen muss, prüfe ich noch kurz, ob die dafür benötigten Variabeln keine NA's enthalten. Dies mache ich mit dem Befehl **sum(is.na$jeweilige Variable)**.
+
+```{r}
+sum(is.na(data$Filialendbestand))
+sum(is.na(data$Aktueller.Sollbestand))
+sum(is.na(data$Datum.erster.Wareneingang))
+sum(is.na(data$Absatz.1.Jahr))
+```
+
+Da die Summen jeweils Null ergeben, zeigt mir das, dass es keine NA-Werte hat. Die Variabeln können daher problemlos für meine neue Berechnung gebraucht werden.
+
+## Bereinigung der Daten
+
+### 1. Umwandlung von Datentypen
+
+*Datum erster Wareneingang* & *Letztes We Datum*
+
+```{r}
+data$Datum.erster.Wareneingang <- as.Date(data$Datum.erster.Wareneingang, format = "%d.%m.%y")
+data$Letztes.WE.Datum <- as.Date(data$Letztes.WE.Datum, format = "%d.%m.%y")
+
+```
+
+*VK Preis aktuell*
+
+```{r}
+data$VK.Preis.aktuell <- as.numeric(data$VK.Preis.aktuell)
+
+```
+*Absatz 1 Jahr*
+
+```{r}
+data$Absatz.1.Jahr <- as.numeric(data$Absatz.1.Jahr)
+```
+
+Ich schaue mir die geändertet Variabeln an und prüfe ob die Anpassungen funktioniert haben.
+
+```{r}
+head(data)
+```
+Nach der Überprüfung, stelle ich fest, dass die Variabeln korrket angepasst wurden.
+
+### 2. Daten ausschliessen
+
+Hier möchte ich aus dem Datensatz Artikel ausschliessen, bei welchen der erste Wareneingang weniger lang als 3 Monate her ist. Die Artikel sind zu wenig lang im Verkauf um sie bereits beurteilen zu können. Da ich den alten Datensatz sicherheitshalber behalten möchte, definiere ich den Datensatz neu. Ich nenne den neuen Datensatz *"data2"*. Ich entferne nun alle Artikel, bei welchen der erste Wareneingang grösser als der 02.06.2023 ist, da ich im Datensatz Wareneingänge bis zum 02.09.2023 habe.
+
+
+```{r}
+data2 <- subset(data, Datum.erster.Wareneingang < "2023-06-02")
+```
+Ich möchte nun prüfen ob die Ausschliessung funktioniert hat und schaue mir die Daten im "Viewer" nochmals an.
+
+```{r}
+View(data2)
+```
+Beim Ordnen der Variabel "Datum erstetr Wareneingang" im Viewer sehe ich nun, dass es kein Datum gibt, welches grösser ist als der 02.06.2023. Die Ausschliessung hat also funktioniert. 
+
+
+## Lager- und Sollbestandsreichweite neu berechnen
+
+### 1. Erstellung Variable für Anzahl Monate seit dem 1. Wareneingang
+
+Wie bereits erwähnt, muss ich, bevor ich die Lagerreichweite neu berechnen kann, eine neue Variable für die Anzahl der Monate seit dem ersten Wareneingang (anzahl.monate.seit.we) erstellen. Den entsprechenden Befehl habe ich in diesem YouTube-Video gefunden: https://www.youtube.com/watch?v=rH8l2FOGUbM.
+
+```{r}
+data2$anzahl.monate.seit.we<- as.integer(difftime("2023-08-31", data2$Datum.erster.Wareneingang, units = "weeks") / 4.33)
+```
+
+### 2. Neue Berechnung der Lager- und Sollbestandsreichweite
+
+Um die neue Lager- und Sollbestandsreichweite zu erhalten, muss ich folgendes berechnen:
+
+Wenn die Anzahl Monate seit dem ersten Wareneingang kleiner als 12 ist, wird der Wert durch die folgende Formel berechnet: **Filialbestand oder Sollbestand / (Absatz 1 Jahr / Anzahl Monate * 12)**. Wenn die Anzahl Monate seit dem ersten Wareneingang grösser oder gleich 12 ist, wird der Wert durch die folgende Formel berechnet: **Filialbestand oder Sollbestand / (Absatz 1 Jahr / 12)**.
+
+```{r}
+#Reichweite für Bestand
+data2$reichweite_bestand <- ifelse(data2$anzahl.monate.seit.we < 12, 
+                             (data2$Filialendbestand / (data2$Absatz.1.Jahr / data2$anzahl.monate.seit.we * 12)),
+                             (data2$Filialendbestand / (data2$Absatz.1.Jahr / 12)))
+
+#Reichweite für Sollbestand
+data2$reichweite_sollb <- ifelse(data2$anzahl.monate.seit.we < 12, 
+                            (data2$Aktueller.Sollbestand / (data2$Absatz.1.Jahr / data2$anzahl.monate.seit.we * 12)),
+                            (data2$Aktueller.Sollbestand / (data2$Absatz.1.Jahr / 12)))
+
+```
+Ich überprüfe im Viewer ob die neuen Variablen *reichweite_bestand* und *reichweite_sollb* erstellt wurden und stelle fest, dass dies der Fall ist.
+
+## Analysen
+
+### 1. Durchschnittliche Lagerreichweite
+
+Als erstes möchte ich mir einen groben Überblick verschaffen und schaue mir die aktuelle Lagerreichweite im Schnitt an. Für die Berechnung der Lagerreichweite schliesse ich die NA- und Inf-Werte (Unendlichkeitswerte) aus, da NA-Werte das Ergebnis verzerren und sie fehlende Daten repräsentieren. Die Inf-Werte entshen hier insbesondere durch Divisionen von Null, daher  würden sie ebenfalls das Ergebnis verzerren. 
+
+```{r}
+mean(data2$reichweite_bestand[is.finite(data2$reichweite_bestand) & !is.na(data2$reichweite_bestand)])
+```
+
+Wir sehen, dass die durchschnittliche Lagerreichweite bei fast 8 Monaten liegt. Dies ist schon mal ein Indiz dafür, dass die Bestände hoch sind. Eine Lagerreichweite von fast 8 Monaten deutet darauf hin, dass die Lagerbestände länger als üblich benötigt werden, um aufgebraucht zu werden,was auf eine übermässige Lagerhaltung hinweist, die hohe Lagerkosten verursacht. 
+
+### 2. Lagerreichweite Histogramm und Boxplot
+
+Nun möchte ich mir in einem Hystogramm und Boxplot die Lagerreichweiten genauer anschauen.
+
+```{r}
+hist(data2$reichweite_bestand, main = "Grafik 1: Lagerreichweite in Monaten Balkendiagramm", xlab = "Lagerreichweite", ylab = "Anzahl Artikel")
+```
+
+```{r}
+boxplot(data2$reichweite_bestand, main = "Grafik 2: Lagerreichweite in Monaten Boxblot", ylab = "Reichweite in Monaten")
+```
+
+Das Histogramm und der Boxplot zeigen die Verteilung der Lagerreichweiten in Monaten. Allerdings sind weder das Histogramm noch der Boxplot in diesem Stadium besonders aufschlussreich, da die Anzahl der Artikel im Datensatz sehr hoch ist und die Spanne der Lagerreichweiten ebenfalls sehr weit geht.
+
+Dennoch fällt auf, dass die meisten Datensätze in einem Bereich zwischen 0 und 50 Monaten Lagerreichweite liegen. Um eine bessere Übersicht zu erhalten, könnte ich mich entscheiden, diesen Bereich genauer zu analysieren. Aber ich möchte dennoch alle Daten berücksichtigen. Daher plane ich, die Daten in Klassen einzuteilen, um eine klarere Darstellung zu erhalten.
+
+
+### 3. Verbesserung der Darstellung durch Erstellung von Klassen 
+
+Nachstehend möchte ich den Datensatz in 5 verschiedene Klassen unterteilen, welche ich einer neuen Variable zuweise:
+
+1. 'Separat prüfen': Diese Klasse umfasst Werte, die entweder NA (fehlende Daten) oder Inf (Unendlichkeitswerte) sind oder weniger als null Monate betragen. Sie erfordern eine separate Überprüfung, da sie auf potenzielle Datenprobleme oder Daten mit Null- oder Minuswerten deuten.
+
+2. 'OK': In dieser Klasse sind Werte enthalten, die kleiner oder gleich 3 Monate betragen. Dies deutet darauf hin, dass der Lagerbestand als angemessen betrachtet werden kann und keine sofortigen Massnahmen erforderlich sind.
+
+3. 'Überprüfen': Lagerreichweiten von mehr als 3 Monaten bis zu 6 Monaten werden dieser Klasse zugeordnet. In dieser Gruppe sollte der Lagerbestand auf Effizienz überprüft werden, um sicherzustellen, dass keine unnötigen Überbestände oder Engpässe auftreten.
+
+4. 'Reduzieren': Diese Klasse enthält Werte, von mehr als 6 Monaten bis zu 12 Monaten. Sie weist darauf hin, dass es sinnvoll sein könnte, den Lagerbestand zu reduzieren, um finanzielle Ressourcen freizusetzen und Lagerkosten zu senken.
+
+5. 'Auf Null setzen': Alle übrigen Werte, die über 12 Monate hinausgehen, werden dieser Klasse zugewiesen. Hier sollte in Betracht gezogen werden, den Lagerbestand, sprich eben auch den Sollbestand, bis auf Null zu reduzieren, um sicherzustellen, dass diese Mengen bis zur Schliessung nicht übrig bleiben.
+
+Diese Klasseneinteilung ermöglicht es, gezielt auf verschiedene Lagerbestandsszenarien zu reagieren und Massnahmen zur Verbesserung der Lagerbestandsverwaltung zu identifizieren.
+
+
+Hier die dazugehörigen Codes für den Lagerreichweite und die Lagerreichweite nach Sollbestand:
+
+1. Nach Bestand (Variable: klass.reichw.best)
+
+```{r}
+data2$klass.reichw.best <- ifelse(is.na(data2$reichweite_bestand) | data2$reichweite_bestand < 0 | is.infinite(data2$reichweite_bestand), "separat prüfen",
+                                  ifelse(data2$reichweite_bestand <= 3, "ok",
+                                         ifelse(data2$reichweite_bestand <= 6, "prüfen",
+                                                ifelse(data2$reichweite_bestand <= 12, "reduzieren", "auf Null reduzieren"))))
+
+```
+
+2. Nach Sollbestand (Variable: klass.reichweite.best)
+
+```{r}
+data2$klass.reichw.sollb <- ifelse(is.na(data2$reichweite_sollb) | data2$reichweite_sollb < 0 | is.infinite(data2$reichweite_sollb), "separat prüfen",
+                                    ifelse(data2$reichweite_sollb <= 3, "ok",
+                                           ifelse(data2$reichweite_sollb <= 6, "prüfen",
+                                                  ifelse(data2$reichweite_sollb <= 12, "reduzieren", "auf Null reduzieren"))))
+```
+
+
+### 4. Analyse der einzelnen Klassen nach Lager- und Sollbestandsreichweite
+
+Ich möchte die neu erstellen Klassen nun in einem Balkendiagramm, sowohl für die Lager-, wie auch die Sollbestanreichweite, wie folgt zeigen:
+
+**Analyse in Balkendiagramm**: Verwendung eines Balkendiagramms zur Visualisierung der Verteilung der Lager- und Sollbestandsklassen.
+**Prozentuale Anteile**: Das Diagramm zeigt Prozentsätze, um die Vertretung der Artikel in jeder Klasse zu illustrieren.
+**Absolute Anzahl**: Ebenfalls wird die Anzahl der Artikel in jeder Klasse angezeigt, um Überbestände besser zu erkennen und geeignete Massnahmen zur Verbesserung der Lagerverwaltung zu identifizieren.
+
+1. Lagerreichweite
+
+```{r}
+# Datenframe für das Balkendiagramm erstellen für die Variale klass.reich.best
+data_for_plot <- data.frame(Artikelnr. = data2$Artikelnr., Kategorie = data2$klass.reichw.best)
+
+# Erstellen des Balkendiagramms mit ggplot2 und Anzahl und Prozentsätzen
+ggplot(data_for_plot, aes(x = Kategorie, fill = Kategorie)) +  # Datenaufbereitung und Darstellungseinstellungen
+  geom_bar() +  # Balkendiagramm erstellen
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.5) +  # Anzahl der Artikel über den Balken
+  geom_text(stat = "count", aes(label = scales::percent(..count../sum(..count..))),  # Prozentwerte über den Balken
+            vjust = 1.5, hjust = 0.5, color = "black") +  # Positionierung und Farbe des Texts
+  labs(title = "Grafik 3: Lagerreichweite nach Klassen",  # Titel und Achsenbeschriftungen
+       x = "Klassen",
+       y = "Anzahl Artikel") +
+  theme_minimal()  # Anpassung des Diagrammstils
+
+```
+
+- Knapp über 40% der Artikel weisen eine gute Lagerreichweite auf und fallen daher in die Kategorie "ok".
+- Ungefähr 12% der Artikel müssen ihren Lagerbestand reduzieren, während etwa 20% in die Kategorie "prüfen" fallen und auf Effizienz überprüft werden sollten.
+- Bei fast 20% der Artikel, was etwa 2553 Artikeln entspricht, wäre es empfehlenswert, den Sollbestand auf null zu reduzieren, um sicherzustellen, dass keine überschüssigen Mengen bis zur Schliessung verbleiben.
+- Etwa 5,5% der Artikel erfordern eine erneute separate Prüfung, um potenzielle Datenprobleme oder andere spezifische Herausforderungen zu klären.
+
+Zusammenfassend zeigt die Analyse, dass bei über 50% der Artikel eine Anpassung des Sollbestands nach unten empfehlenswert ist, wobei bei fast 20% sogar eine Reduzierung auf null in Betracht gezogen werden sollte. 
+
+2. Sollbestand
+
+```{r}
+# Datenframe für das Balkendiagramm erstellen für die Variale klass.reich.sollb
+data_for_plot_2 <- data.frame(Artikelnr. = data2$Artikelnr., Kategorie = data2$klass.reichw.sollb)
+
+# Erstellen des Balkendiagramms mit ggplot2 und Anzahl und Prozentsätzen
+ggplot(data_for_plot_2, aes(x = Kategorie, fill = Kategorie)) +  # Datenaufbereitung und Darstellungseinstellungen
+  geom_bar() +  # Balkendiagramm erstellen
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.5) +  # Anzahl der Artikel über den Balken
+  geom_text(stat = "count", aes(label = scales::percent(..count../sum(..count..))),  # Prozentwerte über den Balken
+            vjust = 1.5, hjust = 0.5, color = "black") +  # Positionierung und Farbe des Texts
+  labs(title = "Grafik 4: Sollbestandsreichweite nach Klassen",  # Titel und Achsenbeschriftungen
+       x = "Klassen",
+       y = "Anzahl Artikel") +
+  theme_minimal()  # Anpassung des Diagrammstils
+
+```
+
+Wir können feststellen, dass die Analyse des Sollbestands ein ähnliches Bild zeigt. In diesem Fall sollten bei fast 50% der Artikel Anpassungen am Sollbestand nach unten vorgenommen werden. Dies deutet darauf hin, dass sowohl die Lagerreichweite als auch der Sollbestand Optimierungspotenzial aufweisen.
+
+## Fazit und Massnahmen Teil 1a
+
+Zwischenfazit:
+
+Die Analyse der Lager- und Sollbestandsreichweite für NOS-Artikel in der Parfümerie-Abteilung der Jelmoli AG zeigt, dass eine beträchtliche Anzahl von Artikeln Anpassungen erfordert, um die Lagerverwaltung zu optimieren. Hier sind einige wichtige Erkenntnisse:
+
+1. Lagerreichweite: Über 40% der Artikel weisen bereits eine gute Lagerreichweite auf und fallen in die Kategorie "ok". Etwa 12% der Artikel sollten ihren Lagerbestand reduzieren, während etwa 20% in die Kategorie "prüfen" fallen und auf Effizienz überprüft werden sollten. Bei fast 20% der Artikel wäre es empfehlenswert, den Sollbestand auf null zu reduzieren, um sicherzustellen, dass keine überschüssigen Mengen bis zur Schliessung verbleiben. Etwa 5,5% der Artikel erfordern eine erneute separate Prüfung, um potenzielle Datenprobleme oder andere spezifische Herausforderungen zu klären. Insgesamt sollten bei über 50% der Artikel Anpassungen des Sollbestands nach unten vorgenommen werden, wobei bei fast 20% sogar eine Reduzierung auf null in Betracht gezogen werden sollte.
+
+2. Sollbestand: Die Analyse der Sollbestandsreichweite zeigt ähnliche Ergebnisse. Bei fast 50% der Artikel sollten Anpassungen am Sollbestand nach unten vorgenommen werden.
+
+Diese Ergebnisse deuten darauf hin, dass es bei der Lagerverwaltung von NOS-Artikeln in der Parfümerie-Abteilung von Jelmoli erhebliches Optimierungspotenzial gibt. Durch gezielte Anpassungen des Lagerbestands und des Sollbestands können Lagerkosten gesenkt und finanzielle Ressourcen freigesetzt werden, um den Schliessungsprozess effizienter zu gestalten. Es ist wichtig, diese Massnahmen frühzeitig umzusetzen, um sicherzustellen, dass keine überschüssigen Bestände bis zur Schliessung verbleiben
+
+Massnahmen:
+
+Die Liste der neu erstellten Klassen sollte sorgfältig mit den zuständigen Einkäufern durchgegangen werden, um definitiv zu bestimmen, welche Artikel angepasst werden sollten. Dabei sollte besondere Aufmerksamkeit darauf gerichtet werden, dass die Artikel, bei denen der Sollbestand auf null korrigiert werden soll, als erste geprüft werden. Dieser Schritt ist entscheidend, um sicherzustellen, dass keine überschüssigen Bestände bis zur Schliessung verbleiben und die Lagerverwaltung optimiert wird. Die Einkäufer sollten die erforderlichen Massnahmen zur Anpassung des Lagerbestands und des Sollbestands umsetzen, um die Lagerkosten zu senken und finanzielle Ressourcen freizusetzen. Es ist ratsam, diese Massnahmen frühzeitig umzusetzen, um den Schliessungsprozess effizienter zu gestalten.
+
+# Teil 1b
+
+## Ausgangslage
+
+Ein häufig diskutierter Punkt ist die Breite des Sortiments in der Parfümerie pro Marke. Besonders relevant ist diese Fragestellung bei sogenannten "Countern," die spezielle Verkaufsbereiche innerhalb der Parfümerie sind. Counter sind Shops in der Parfümerie, die durch die jeweilige Marke finanziert werden und oft auch eigene Verkäufer im Shop haben. Im Gegenzug dafür, dass die Marke diese Verkaufsflächen finanziert, wird oft verlangt, dass eine breite Produktpalette in das Sortiment der Parfümerie aufgenommen wird. Es ist zu beachten, dass in der Regel je breiter ein Sortiment wird, umso mehr SKUs (Artikelvarianten) es im Sortiment gibt, was wiederum die Lagerreichweite erhöht.
+
+Im Hinblick auf die Schliessung des Warenhauses besteht die Befürchtung, dass Counter eine zu hohe Anzahl an Artikeln im Sortiment haben, die zu hohe Lagerreichweiten aufweisen.
+
+Fragen, die in diesem Teil beantwortet werden sollen:
+
+- Wie ist die Korrelation zwischen der Lagerreichweite von Countern und Nicht-Countern?
+- Wie beeinflusst die Breite des Sortiments die Lagerreichweite?
+
+Um diese Fragen zu klären, ist es zunächst erforderlich, die Daten für Counter- und Nicht-Counter-Marken in der Parfümerie zu identifizieren und zu separieren. Hierfür werde ich als erstes die neuen Daten laden und mit den bestehenden Daten verknnüpfen
+
+
+- Als erstes müssen die Daten wo die Bezeichnung der Counter und nicht Counter ist Verbinden werden
+
+
+## Einfügen und Verknüpfen der neuen Daten
+
+### 1. Laden der Daten
+
+Zuerst lade ich die neue Datei, die die Informationen zu Countern enthält, mit dem folgenden Code:
+
+```{r}
+counter_data <- read.csv2("Counter.csv")
+```
+
+Um die neuen Daten zu überprüfen, schaue ich mir diese mit der Funktion "head" an.
+
+```{r}
+head(counter_data)
+```
+
+### 2. Verknüpfen der Daten
+
+Damit die Verknüpfung zwischen dem vorhandenen Datensatz und den neuen Daten hergestellt werden kann, ist es wichtig, sicherzustellen, dass die Variable, die die Markeninformationen enthält, denselben Namen in beiden Datensätzen hat. In diesem Fall möchten ich die Variable in im vorhandenen Datensatz ("data2") von "Marke.Beschreibung" in "Marke" umbenennen. Das erfolgt mit dem folgenden Code:
+
+```{r}
+data2 <- data2 %>%
+  rename(Marke = Marke.Beschreibung)
+```
+
+Nachdem die Variablen in beiden Datensätzen denselben Namen haben, können die Daten verknüpft werden. In diesem Fall verwende ich die Funktion **left_join**, um die Daten anhand der Marke zu verknüpfen
+
+```{r}
+data2 <- data2 %>%
+  left_join(counter_data, by = c("Marke" = "Marke"))
+```
+
+Um den Datensatz sauber zu halten, werden alle NA-Werte in der neuen Variable "Counter" durch den Text "Kein Counter" erestzt, dies um anzuzeigen, dass es sich um Nicht-Counter-Marken handelt.
+
+```{r}
+data2$Counter <- ifelse(is.na(data2$Counter), "Kein Counter", data2$Counter)
+```
+
+Nun wurden die Daten verknüpft und sind bereit für den Analysepart.
+
+## Anlysen
+
+### 1. Counter vs. Nicht-Counter
+
+Um die Verteilung der Klassen nach Counter oder Nicht-Counter zu analysieren, wird als erstes ein Balkendiagramm erstellt.
+
+```{r}
+
+# Daten gruppieren und Counter-Werte kategorisieren
+ggplot(data2 %>%
+         mutate(Counter = ifelse(Counter %in% c("Counter", "Kein Counter"), Counter, "Andere")) %>% # Daten gruppieren und Counter-Werte kategorisieren
+         group_by(Counter, klass.reichw.best) %>% # Counter und Nicht-Counter in separate Kategorien unterteilen
+         summarise(Count = n(), .groups = "drop") %>% # Die Anzahl der Beobachtungen pro Kategorie zählen
+         ungroup() %>% # Gruppierung aufheben
+         group_by(Counter) %>% # Erneut gruppieren, um Prozentsätze zu berechnen
+         mutate(Percent = (Count / sum(Count)) * 100) %>% # EProzentsätze berechnen
+         arrange(Counter, klass.reichw.best),
+aes(x = Counter, y = Percent, fill = klass.reichw.best)) + # x, y und fill Variablen festlegen
+geom_bar(stat = "identity") + # Balkendiagramm erstellen
+geom_text(aes(label = paste0(round(Percent), "%")), position = position_stack(vjust = 0.5)) + # Textbeschriftungen für die Balken hinzufügen
+labs(title = "Grafik 5: Verteilung von Klasse nach Counter oder Nicht-Counter", x = "Counter", y = "Anteil in Prozent") + # Diagrammtitel und Achsenbeschriftungen festlegen
+scale_y_continuous(breaks = NULL) + # Einstellungen für die y-Achse anpassen (Ticks entfernen)
+theme_minimal() # Minimalistisches Design für das Diagramm auswählen
+
+
+
+```
+
+Das Balkendiagramm zeigt interessante Erkenntnisse bezüglich der Lagerreichweite in Bezug auf Counter und Nicht-Counter. Zunächst könnte man annehmen, dass Counter aufgrund ihres breiteren Sortiments tendenziell höhere Lagerreichweiten aufweisen. Jedoch zeigt das Diagramm, dass diese Annahme nicht zwingend zutrifft, denn die Anteile der Artikel, bei welchen die Sollbestände reduziert werden müsstn, ist bei den Nicht-Counter-Marken höher. Es scheint keinen klaren Zusammenhang zwischen der Breite des Sortiments und der Lagerreichweite zu geben. 
+
+Es ist wichtig zu beachten, dass Counter in der Regel bekannte Marken repräsentieren und sich oft in bester Lage in den Parfümerien befinden. Zusätzlich haben sie oft eigene Verkaufsmitarbeiter. Diese Faktoren könnten dazu beitragen, dass Counter trotz eines breiteren Angebots nicht notwendigerweise höhere Lagerreichweiten aufweisen. 
+
+### 2. Korrelationen zwischen Sollbestandsreichweite und Sortimentsbreite von Marken
+
+Die Frage ist nun wie sich die Lagerreichweite unabhängig von Counter oder Nicht-Counter verhält, also wie sie sich innerhlab von den einzelnen Marken verhaltet. Dies möchte ich nun nachfolgend in einem Streudiagramm prüfen. Um dies machen zu können, muss ich zuerst folgende Variablen erstelln:
+
+- Anzahl Artikel pro Marke
+- Durchschnittlich Lagerreichweite pro Marke
+
+Zuerst erstelle ich eine Variable, die die Anzahl der Artikel pro Marke angibt. Dies hilft mir, die Grösse des Sortiments jeder Marke zu quantifizieren.
+
+```{r}
+data2$Anzahl_Artikel_pro_Marke <- ave(data2$Artikelnr., data2$Marke, FUN = length)
+
+```
+
+Als nächstes die Erstellung einer Variable, die die durchschnittliche Lagerreichweite (Sollbestandsreichweite) pro Marke berechnet. Dies ermöglicht es mir, die durchschnittliche Lagerreichweite für Artikel jeder Marke zu untersuchen.
+
+```{r}
+data2 <- data2 %>%
+  filter(!is.na(reichweite_sollb) & is.finite(reichweite_sollb)) %>%
+  group_by(Marke) %>%
+  mutate(durchschnitt_Sollbestandsreichw_pro_marke = mean(reichweite_sollb, na.rm = TRUE)) %>%
+  ungroup()
+```
+
+Nun kann die Beziehung zwischen diesen beiden Variablen in einem Streudiagramm visualisiert werden.
+
+```{r}
+data2$Anzahl_Artikel_pro_Marke <- as.numeric(data2$Anzahl_Artikel_pro_Marke)
+ggplot(data2, aes(x = Anzahl_Artikel_pro_Marke, y = durchschnitt_Sollbestandsreichw_pro_marke)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Regressionslinie
+  labs(title = "Grafik 6: Anzahl Artikel pro Marke vs. Durchschnitt Sollbestandsreichweite pro Marke",
+       x = "Anzahl Artikel pro Marke",
+       y = "Durchschnitt Sollbestandsreichweite pro Marke") +
+  scale_x_continuous(breaks = seq(0, 800, by = 100)) +
+  theme_minimal() 
+  
+```
+
+Als nächstes wird der Korrelationskoeffizient berechnet.
+
+```{r}
+correlation <- cor(data2$Anzahl_Artikel_pro_Marke, data2$durchschnitt_Sollbestandsreichw_pro_marke)
+print (correlation)
+```
+
+Wir sehen in diesem Streudiagramm, dass es eine schwache Korrelation zwischen der Anzahl der Artikel pro Marke und der durchschnittlichen Sollbestandsreichweite pro Marke gibt. Der Korrelationskoeffizient bestätigt diese schwache Beziehung.
+
+Diese Ergebnisse zeigen, dass die Breite des Sortiments einer Marke nicht zwangsläufig die Lagerreichweite beeinflusst.
+
+### 3. Korrelation zwischen Umsatz und Sollbestandsreichweite
+
+Da zwischen der Anzahl der Artikel pro Marke und der durchschnittlichen Sollbestandsreichweite praktisch keine Korrelation existiert, möchten ich dennoch untersuchen, ob der Umsatz einen Einfluss auf die Lagerreichweite hat. Genauer gesagt, ob Artikel mit höherem Umsatz tendenziell eine niedrigere Lagerreichweite aufweisen und umgekehrt. Dies ist von Bedeutung, da die Anzahl der Artikel pro Marke nicht unbedingt einen Einfluss auf die Lagerreichweite zu haben scheint.
+
+Zunächst erfolgt die Berechnung des Umsatzes, da diese Information in den vorhandenen Daten fehlt. Die Kombination der Variable "Absatz.1.Jahr" mit der Variable "VK.Preis.aktuell" ermöglicht die Umsatzberechnung. Es muss jedoch beachtet werden, dass es sich hierbei um den Bruttoumsatz handelt und nicht um den effektiven Kassenumsatz, also den Nettoumsatz. Für die Analyse wird der durchschnittliche monatliche Umsatz anstelle des Jahresumsatzes verwendet, da die Umsätze von Monat zu Monat variieren können.
+
+
+Nachfolgend die Erstellung der neuen Variable "Umsatz_Schnitt_Monat":
+
+```{r}
+data2$VK.Preis.aktuell <- as.numeric(data2$VK.Preis.aktuell)
+
+data2$Umsatz_Schnitt_Monat <- ifelse(data2$anzahl.monate.seit.we < 12, 
+                                      ((data2$Absatz.1.Jahr / 12 * data2$anzahl.monate.seit.we) * data2$VK.Preis.aktuell),
+                                      ((data2$Absatz.1.Jahr / 12) * data2$VK.Preis.aktuell))
+
+```
+
+Anschliessend wird die Korrelation zwischen dem durchschnittlichen monatlichen Umsatz und der Sollbestandsreichweite in einem Streudiagramm untersucht:
+
+```{r}
+ggplot(data2, aes(x = Umsatz_Schnitt_Monat, y = reichweite_sollb)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Regressionslinie
+  labs(title = "Grafik 7: Umsatz Schnitt Monat vs. Reichweite Sollbestand",
+       x = "Umsatz Schnitt Monat",
+       y = "Reichweite Sollbestand") +
+  theme_minimal() 
+```
+
+Daraufhin erfolgt die Berechnung der Korrelation zwischen diesen beiden Variablen:
+
+```{r}
+correlation2 <- cor(data2$Umsatz_Schnitt_Monat, data2$reichweite_sollb)
+print (correlation2)
+```
+
+
+Die Analyse zeigt, dass zwischen dem monatlichen Umsatz und der Sollbestandsreichweite eine eher schwache Korrelation besteht. Das bedeutet, dass der Umsatz allein nicht ausreicht, um die Lagerreichweite der Artikel zu erklären.
+
+Möglicherweise lässt sich jedoch feststellen, dass der Anteil von Artikeln, die nur einen geringen Umsatz generieren, relativ hoch ist. Dies könnte darauf hindeuten, dass ein breites Sortiment nicht unbedingt erforderlich ist, um einen hohen Umsatz zu erzielen. Dies möchte ich nun im nachstehenden Kapitel prüfen.
+
+### 4. Umsatzanteil nach Quantilen
+
+Um den Anteil der Artikel, die aufgrund ihres durchschnittlichen Umsatzes als besonders wichtig eingestuft werden können, genauer zu verdeutlichen, habe ich die Artikel in verschiedene Quantile unterteilt. Diese Einteilung ermöglicht es, die Artikel in Kategorien einzuteilen, basierend auf ihrem Umsatzverhalten. Folgende Quantile möchte ich nach Umsatz unterteilen:
+
+A = obere 25% der Artikel
+B = obere 50% bis 75% der Artikel
+C = untere 50% der Artikel
+
+Nachstehend die Erstellung der Quantile:
+
+```{r}
+# Definieren der gewünschten Quantile
+quantile <- quantile(data2$Umsatz_Schnitt_Monat, probs = c(0, 0.5, 0.75, 1))
+
+# Kategorisieren der Variable basierend auf den Quantilen
+data2$Umsatz_Kategorie <- cut(data2$Umsatz_Schnitt_Monat, 
+                              breaks = quantile, 
+                              labels = c("C", "B", "A"), 
+                              include.lowest = TRUE)
+```
+
+Nun möchte ich anhand eines Balkendigramms sehen, wie hoch die Umsatzatneile der erstellten Quantile sind.
+
+```{r}
+# Summe der Umsätze für jede Kategorie berechnen
+umsatz_summen <- data2 %>%
+  group_by(Umsatz_Kategorie) %>%
+  summarise(Summe_Umsatz = sum(Umsatz_Schnitt_Monat, na.rm = TRUE))
+
+# Gesamtsumme der Umsätze berechnen
+gesamtsumme <- sum(umsatz_summen$Summe_Umsatz)
+
+# Prozentsatz für jede Kategorie berechnen
+umsatz_summen <- umsatz_summen %>%
+  mutate(Prozent = (Summe_Umsatz / gesamtsumme) * 100)
+
+# Erstellen des Balkendiagramms
+ggplot(umsatz_summen, aes(x = Umsatz_Kategorie, y = Prozent)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Grafik 8: Umsatzanteil nach Kategorie",
+       y = "Prozent des Gesamtumsatzes") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))  # Titel zentrieren
+
+
+```
+
+Die Analyse zeigt, dass etwa 80% des Umsatzes durch lediglich 25% der Artikel generiert werden. Andererseits tragen 75% der Artikel lediglich etwa 20% zum Gesamtumsatz bei. Diese Erkenntnis deutet darauf hin, dass möglicherweise zu viele Artikel im Sortiment vorhanden sind und die Sortimente tendenziell zu breit gefächert sind. Dies wiederum könnte sich negativ auf die Lagerreichweiten auswirken.
+
+Es ist jedoch wichtig, diese Schlussfolgerung mit Vorsicht zu betrachten. Eine gewisse Auswahl an Artikeln ist erfahrungsgemäss erforderlich, um ein attraktives Sortiment für die Kunden zu bieten. Ein Sortiment, das nur aus Bestsellern besteht, ist in der Praxis oft nicht realisierbar. Dennoch empfehle ich, nicht nur die Sollbestände zu reduzieren, wie im ersten Kapitel erwähnt, sondern auch die allgemeine Sortimentsbreite bei den Marken zu überprüfen. Es ist ratsam, die Bestseller zu stärken und die Slow-Seller zu eliminieren, wenn dies möglich ist, um sie aus dem Sortiment zu entfernen.
+
+## Fazit Teil 1b und Empfehlungen
+
+Im Rahmen von Teil 1b der Analyse habe ich mich auf die Auswirkungen der Sortimentsbreite in der Parfümerie auf deren Lagerreichweite konzentriert und ursprünglich die nachstehenden ersten zwei Fragen bearbeitet. Diese Fragen zielten darauf ab, die Korrelation zwischen der Lagerreichweite von Countern und Nicht-Countern zu untersuchen und den Einfluss der Sortimentsbreite auf die Lagerreichweite zu bewerten. Jedoch ergaben sich aufgrund der geringen Korrelation zwischen Sortimentsbreite und Lagerreichweite zusätzliche Fragestellungen. Daher wurden auch die Fragen nach dem Einfluss des Umsatzes und der Counter auf die Lagerreichweite analysiert.
+
+1. **Korrelation zwischen der Lagerreichweite von Countern und Nicht-Countern:** Die Analyse zeigt, dass die Breite des Sortiments allein nicht notwendigerweise zu höheren Lagerreichweiten führt. Counter, die ein breiteres Sortiment anbieten, weisen nicht zwangsläufig höhere Lagerreichweiten auf.
+
+2. **Korrelationen zwischen Sollbestandsreichweite und Sortimentsbreite von Marken:** Es wurde festgestellt, dass es keine signifikante Korrelation zwischen der Anzahl der Artikel pro Marke und der durchschnittlichen Sollbestandsreichweite pro Marke gibt.
+
+3. **Korrelation zwischen Umsatz und Sollbestandsreichweite:** Die Korrelation zwischen dem monatlichen Umsatz und der Sollbestandsreichweite war ebenfalls schwach, was darauf hinweist, dass der Umsatz allein nicht ausreicht, um die Lagerreichweite zu erklären.
+
+4. **Umsatzanteil nach Quantilen:** Etwa 80% des Umsatzes werden durch lediglich 25% der Artikel generiert, während 75% der Artikel nur etwa 20% zum Gesamtumsatz beitragen. Dies deutet darauf hin, dass möglicherweise zu viele Artikel im Sortiment vorhanden sind, und die Sortimente tendenziell zu breit gefächert sind.
+
+Basierend auf diesen Ergebnissen ergeben sich folgende Empfehlungen:
+
+- Das Sortiment sollte kritisch überprüft werden, um Slow-Seller zu identifizieren, die wenig Umsatz generieren.
+- Es empfiehlt sich, Bestseller zu stärken, um die Umsatzanteile zu erhöhen.
+- Artikel, die keinen signifikanten Beitrag zum Umsatz leisten, sollten in Erwägung gezogen werden, aus dem Sortiment zu nehmen.
+- Bei der Sortimentsgestaltung sollte ein Gleichgewicht zwischen Vielfalt und Lagerreichweite beachtet werden, um Überbestände zu vermeiden.
+
+Diese Empfehlungen sollen dazu beitragen, die Lagerreichweiten zu optimieren und gleichzeitig ein attraktives Sortiment für die Kunden aufrechtzuerhalten. 
+
+## Schlusswort
+
+Abschliessend lässt sich festhalten, dass die Analyse der Lager- und Sollbestandsreichweite für NOS-Artikel in der Parfümerie-Abteilung der Jelmoli AG wichtige Erkenntnisse über die Lagerverwaltung und die notwendigen Anpassungen geliefert hat. Die Untersuchung ergab, dass eine beträchtliche Anzahl von Artikeln Anpassungen erfordert, um die Effizienz der Lagerverwaltung zu steigern.
+
+In Teil 1a der Arbeit wurde die Lagerreichweite analysiert. Über 40% der Artikel verfügen bereits über eine akzeptable Lagerreichweite, während etwa 12% der Artikel ihren Lagerbestand reduzieren sollten. Etwa 20% der Artikel sollten auf Effizienz überprüft werden, und bei fast 20% der Artikel wäre es sinnvoll, den Sollbestand auf null zu setzen, um sicherzustellen, dass keine überschüssigen Mengen bis zur Schliessung verbleiben. Etwa 5,5% der Artikel erfordern eine separate Prüfung, um potenzielle Datenprobleme oder spezifische Herausforderungen zu klären. Insgesamt sollten bei über 50% der Artikel Anpassungen des Sollbestands nach unten vorgenommen werden, wobei bei fast 20% sogar eine Reduzierung auf null in Betracht gezogen werden sollte.
+
+Die Analyse der Sollbestandsreichweite in Teil 1a ergab ähnliche Ergebnisse, wobei fast 50% der Artikel Anpassungen am Sollbestand erfordern.
+
+Die Ergebnisse deuten darauf hin, dass es erhebliches Optimierungspotenzial in der Lagerverwaltung von NOS-Artikeln in der Parfümerie-Abteilung von Jelmoli gibt. Durch gezielte Anpassungen des Lagerbestands und des Sollbestands können Lagerkosten gesenkt und finanzielle Ressourcen freigesetzt werden, um den Schliessungsprozess effizienter zu gestalten. Es ist entscheidend, diese Massnahmen rechtzeitig umzusetzen, um sicherzustellen, dass keine überschüssigen Bestände bis zur Schliessung verbleiben.
+
+Die Liste der neu erstellten Klassen sollte sorgfältig mit den verantwortlichen Einkäufern durchgegangen werden, um die endgültigen Anpassungen zu bestimmen. Besondere Aufmerksamkeit sollte den Artikeln gewidmet werden, bei denen der Sollbestand auf null gesetzt werden soll. Diese Schritte sind entscheidend, um sicherzustellen, dass die Lagerverwaltung optimiert wird und keine überschüssigen Bestände bis zur Schliessung verbleiben.
+
+Die rechtzeitige Umsetzung dieser Massnahmen wird dazu beitragen, die Effizienz der Lagerverwaltung zu steigern und die finanzielle Gesundheit des Unternehmens während des Schliessungsprozesses zu gewährleisten.
+
+Abschliessend möchte ich betonen, dass die vorliegende Analyse einen Einblick in die komplexen Zusammenhänge zwischen Sortimentsbreite, Lagerreichweite, Umsatz und der Rolle von Countern in der Parfümerie ermöglicht hat. Die Ergebnisse deuten darauf hin, dass die reine Grösse eines Sortiments nicht zwangsläufig die Lagerreichweite beeinflusst. Vielmehr sind es vielschichtige Faktoren, darunter der Umsatz und die Bedeutung bestimmter Artikel für das Gesamtgeschäft, die hier eine Rolle spielen.
+
+Es wurde deutlich, dass die Konzentration auf Bestseller und eine gezielte Reduzierung von Slow-Sellern in Erwägung gezogen werden sollten, um die Lagerreichweiten zu optimieren. Dies kann dazu beitragen, Ressourcen effizienter einzusetzen und Engpässe zu vermeiden
+
+## Grafikverzeichnis
+
+1. Grafik 1: Lagerreichweite in Monaten Blakendiagramm
+2. Grafik 2: Lagerreichweite in Monaten Boxplot
+3. Grafik 3: Lagerreichweite nach Klassen
+4. Grafik 4: Sollbestandsreichweite nach Klassen
+5. Grafik 5: Verteilung von Klasse nach Counter oder Nicht-Counter
+6. Grafik 6: Anzahl Artikel pro Marke vs. Durchschnitt Sollbestandsreichweite pro Marke
+7. Grafik 7: Umsatz Schnitt Monat vs. Reichweite Sollbestand
+8. Grafik 8: Umsatzanteil nach Kategorie
+
+
+
+
